@@ -91,4 +91,37 @@ export class CartsService {
             throw new Error('Unable to create a cart');
         }
     }
+
+    async addLineItem(cartId, cartItem): Promise<any> {
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getAdminToken();
+
+        const payload = {
+            cartItem: {
+                sku: cartItem.AddLineItem.variantId,
+                qty: cartItem.AddLineItem.quantity,
+            }
+        };
+
+        try {
+            const response = await axios.post(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items`, payload, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            });
+
+            const formattedResponse = {
+                version: cartItem.version + 1,
+                ...response.data,
+            };
+
+            return formattedResponse;
+        }
+        catch (error) {
+            console.error('Error on adding a new item to the cart:', error);
+            throw new Error('Unable to add a new item to the cart');
+        }
+    }
 }
