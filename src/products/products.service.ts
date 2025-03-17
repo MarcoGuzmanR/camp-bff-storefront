@@ -70,6 +70,85 @@ export class ProductsService {
         return `products?${queryParams.toString()}`;
     }
 
+    private formatVariant = (item) => {
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+
+        return {
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            attributes: [
+                {
+                    name: 'Color',
+                    value: {
+                        key: item.custom_attributes[6]?.value,
+                        label: item.name.split('-')[item.name.split('-').length - 1],
+                    }
+                },
+                {
+                    name: 'Size',
+                    value: {
+                        key: item.custom_attributes[5]?.value,
+                        label: item.name.split('-')[item.name.split('-').length - 2],
+                    }
+                }
+            ],
+            prices: [{
+                value: {
+                    centAmount: item?.price * 100,
+                    currencyCode: 'USD',
+                }
+            }],
+            images: [{
+                url: `${magentoUrl}/pub/media/catalog/product/${item.media_gallery_entries[0]?.file}`,
+            }],
+            slug: item.custom_attributes[9]?.value,
+        };
+    }
+
+    private formatProductsByCategory = (items) => {
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+
+        return items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            description: item?.custom_attributes[10]?.value,
+            variants: [{
+                id: item.id,
+                name: item.name,
+                sku: item.sku,
+                prices: [{
+                    value: {
+                        centAmount: item?.price * 100,
+                        currencyCode: 'USD',
+                    }
+                }],
+                images: [{
+                    url: `${magentoUrl}/pub/media/catalog/product/${item.media_gallery_entries[0]?.file}`,
+                }],
+            }],
+            masterVariant: {
+                id: item.id,
+                name: item.name,
+                sku: item.sku,
+                prices: [{
+                    value: {
+                        centAmount: item?.price * 100,
+                        currencyCode: 'USD',
+                    }
+                }],
+                images: [{
+                    url: `${magentoUrl}/pub/media/catalog/product/${item.media_gallery_entries[0]?.file}`,
+                }],
+                slug: item.custom_attributes[4]?.value,
+            },
+        }));
+    }
+
+    private formatProductVariants = (children) => {
+        return children.map((child) => this.formatVariant(child));
+    }
+
     async getProducts(params): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const adminToken = await this.getAdminToken();
@@ -84,11 +163,13 @@ export class ProductsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
+
             return {
                 total: response.data?.total_count,
-                results: response.data?.items,
+                results: this.formatProductsByCategory(response.data?.items || []),
                 searchCriteria: response.data?.search_criteria,
             };
+
         }
         catch (error) {
             console.error('Error fetching products from Magento:', error);
@@ -101,7 +182,7 @@ export class ProductsService {
         const adminToken = await this.getAdminToken();
 
         try {
-            const response = await axios.get(`${magentoUrl}/rest/V1/products/${sku}`, {
+            const productResponse = await axios.get(`${magentoUrl}/rest/V1/products/${sku}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
@@ -109,7 +190,26 @@ export class ProductsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            return response.data;
+            const item = productResponse?.data;
+
+            const productChildrenResponse = await axios.get(`${magentoUrl}/rest/V1/configurable-products/${item.sku}/children`, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            });
+
+            const itemChildren = productChildrenResponse?.data;
+            const variants = itemChildren.length ? this.formatProductVariants(itemChildren) : [this.formatVariant(item)];
+
+            return {
+                id: item.id,
+                name: item.name,
+                description: item?.custom_attributes[10]?.value,
+                variants,
+                masterVariant: variants[0] || {},
+            };
         }
 
         catch (error) {
