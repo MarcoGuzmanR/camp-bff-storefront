@@ -28,7 +28,7 @@ export class CartsService {
         }
     }
 
-    async createNewCart(): Promise<string> {
+    async createNewCart(): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const adminToken = await this.getAdminToken();
 
@@ -41,7 +41,17 @@ export class CartsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            return response.data;
+            return {
+                id: response.data,
+                version: 0,
+                customerId: 'customer-id',
+                lineItems: [],
+                totalPrice: {
+                    currencyCode: 'USD',
+                    centAmount: 0
+                },
+                totalQuantity: 0
+            };
         }
         catch (error) {
             console.error('Error on creating a new cart:', error);
@@ -62,7 +72,19 @@ export class CartsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            return response.data;
+            const cart = response.data;
+
+            return {
+                id: cartId,
+                version: 0,
+                customerId: 'customer-id',
+                lineItems: cart.items,
+                totalPrice: {
+                    currencyCode: cart.currency.base_currency_code,
+                    centAmount: cart.currency.store_to_base_rate,
+                },
+                totalQuantity: cart.currency.store_to_quote_rate,
+            };
         }
         catch (error) {
             console.error('Error on creating a new cart:', error);
