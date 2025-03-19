@@ -16,7 +16,17 @@ export class CartsController {
     }
 
     @Put(':cartId')
-    async addLineItem(@Param('cartId') cartId: string, @Body() cartItem: any) {
-      return this.cartsService.addLineItem(cartId, cartItem);
+    async updateCart(@Param('cartId') cartId: string, @Body() cartItem: any) {
+        if (cartItem.action === 'AddLineItem') {
+            return this.cartsService.addLineItem(cartId, cartItem);
+        }
+
+        if (cartItem.action === 'ChangeLineItemQuantity') {
+            return this.cartsService.changeLineItemQuantity(cartId, cartItem);
+        }
+
+        if (cartItem.action === 'RemoveLineItem') {
+            return this.cartsService.removeLineItem(cartId, cartItem);
+        }
     }
 }
