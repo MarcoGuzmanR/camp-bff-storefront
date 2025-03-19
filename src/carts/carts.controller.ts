@@ -10,6 +10,11 @@ export class CartsController {
         return this.cartsService.createNewCart();
     }
 
+    @Post(':id/order')
+    createOrder(@Param('id') cartId: string) {
+        return this.cartsService.createOrder(cartId);
+    }
+
     @Get(':cartId')
     getCart(@Param('cartId') cartId: string) {
         return this.cartsService.getCart(cartId);

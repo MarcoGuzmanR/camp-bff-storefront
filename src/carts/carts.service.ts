@@ -145,7 +145,7 @@ export class CartsService {
             const shippingInfoFromCart = cart.extension_attributes?.shipping_assignments[0]?.shipping;
             const street = shippingInfoFromCart?.address?.street[0]?.split(' ');
             const shippingAddress = shippingInfoFromCart.address.email ? {
-                shippingAddress: {
+                address: {
                     firstName: shippingInfoFromCart.address.firstname,
                     lastName: shippingInfoFromCart.address.lastname,
                     streetName: street.slice(0, -1).join(' '),
@@ -320,6 +320,31 @@ export class CartsService {
         catch (error) {
             console.error('Error on adding a new item to the cart:', error);
             throw new Error('Unable to add a new item to the cart');
+        }
+    }
+
+    async createOrder(cartId): Promise<any> {
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getAdminToken();
+
+        const payload = {
+            method: 'card',
+        };
+
+        try {
+            const response = await axios.put(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/order`, payload, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            });
+
+            return response?.data;
+        }
+        catch (error) {
+            console.error('Error on creating an order:', error);
+            throw new Error('Unable to create an order');
         }
     }
 }
