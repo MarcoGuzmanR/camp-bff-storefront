@@ -28,5 +28,9 @@ export class CartsController {
         if (cartItem.action === 'RemoveLineItem') {
             return this.cartsService.removeLineItem(cartId, cartItem);
         }
+
+        if (cartItem.action === 'SetShippingAddress') {
+            return this.cartsService.setShippingAddress(cartId, cartItem);
+        }
     }
 }

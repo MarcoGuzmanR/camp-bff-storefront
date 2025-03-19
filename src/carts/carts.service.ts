@@ -142,6 +142,21 @@ export class CartsService {
             const cart = response.data;
 
             const formattedItems = await this.getFormatItems(cart.items);
+            const shippingInfoFromCart = cart.extension_attributes?.shipping_assignments[0]?.shipping;
+            const street = shippingInfoFromCart?.address?.street[0]?.split(' ');
+            const shippingAddress = shippingInfoFromCart.address.email ? {
+                shippingAddress: {
+                    firstName: shippingInfoFromCart.address.firstname,
+                    lastName: shippingInfoFromCart.address.lastname,
+                    streetName: street.slice(0, -1).join(' '),
+                    streetNumber: street[street.length - 1],
+                    postalCode: shippingInfoFromCart.address.postcode,
+                    region: shippingInfoFromCart.address.region,
+                    city: shippingInfoFromCart.address.city,
+                    country: shippingInfoFromCart.address.country_id,
+                    email: shippingInfoFromCart.address.email,
+                },
+            } : {};
 
             return {
                 id: cartId,
@@ -164,6 +179,7 @@ export class CartsService {
                     }, 0)
                 },
                 totalQuantity: formattedItems.reduce((acc: number, lineItem: any) => acc + (lineItem.quantity || 0), 0),
+                ...shippingAddress,
             };
         }
         catch (error) {
@@ -265,6 +281,45 @@ export class CartsService {
         catch (error) {
             console.error('Error on removing an item to the cart:', error);
             throw new Error('Unable to remove an item to the cart');
+        }
+    }
+
+    async setShippingAddress(cartId, cartItem): Promise<any> {
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getAdminToken();
+
+        const shippingInfo = cartItem.SetShippingAddress;
+        const payload = {
+            addressInformation: {
+                shipping_address: {
+                    firstname: shippingInfo.firstName,
+                    lastname: shippingInfo.lastName,
+                    street: [`${shippingInfo.streetName} ${shippingInfo.streetNumber}`],
+                    postcode: shippingInfo.postalCode,
+                    region: shippingInfo.region,
+                    city: shippingInfo.city,
+                    country_id: shippingInfo.country,
+                    email: shippingInfo.email,
+                },
+                shipping_method_code: 'flatrate',
+                shipping_carrier_code: 'flatrate',
+            }
+        };
+
+        try {
+            const response = await axios.post(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/shipping-information`, payload, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            });
+
+            return response?.data;
+        }
+        catch (error) {
+            console.error('Error on adding a new item to the cart:', error);
+            throw new Error('Unable to add a new item to the cart');
         }
     }
 }
