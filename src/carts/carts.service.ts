@@ -34,6 +34,7 @@ export class CartsService {
         return {
             id: product.id,
             sku: product.sku,
+            name: product.name,
             attributes: [
                 {
                     name: 'Color',
@@ -208,15 +209,17 @@ export class CartsService {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const adminToken = await this.getAdminToken();
 
+        const itemId = cartItem.ChangeLineItemQuantity.lineItemId;
+
         const payload = {
             cartItem: {
-                sku: cartItem.ChangeLineItemQuantity.variantId,
+                item_id: cartItem.ChangeLineItemQuantity.lineItemId,
                 qty: cartItem.ChangeLineItemQuantity.quantity,
             }
         };
 
         try {
-            const response = await axios.put(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItem.cart_id}`, payload, {
+            const response = await axios.put(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${itemId}`, payload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
@@ -241,8 +244,10 @@ export class CartsService {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const adminToken = await this.getAdminToken();
 
+        const cartItemId = cartItem.RemoveLineItem.lineItemId;
+
         try {
-            const response = await axios.delete(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItem.cart_id}`, {
+            const response = await axios.delete(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItemId}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
