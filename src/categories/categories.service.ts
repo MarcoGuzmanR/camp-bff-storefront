@@ -21,7 +21,7 @@ type Category = {
 export class CategoriesService {
     constructor(private configService: ConfigService) {}
 
-    private async getAdminToken(): Promise<string> {
+    private async getMagentoAdminToken(): Promise<string> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const username = this.configService.get<string>('ADMIN');
         const password = this.configService.get<string>('PASS');
@@ -39,6 +39,60 @@ export class CategoriesService {
         } catch (error) {
             console.error('Error obtaining admin token:', error);
             throw new Error('Unable to obtain admin token');
+        }
+    }
+
+    private async getCommerceToolsAdminToken(): Promise<string> {
+        const commerceToolsAuthUrl = this.configService.get<string>('COMMERCETOOLS_AUTH_URL');
+        const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+        const username = this.configService.get<string>('COMMERCETOOLS_CLIENT_ID');
+        const password = this.configService.get<string>('COMMERCETOOLS_CLIENT_SECRET');
+
+        try {
+            const response = await axios.post(`${commerceToolsAuthUrl}/oauth/token`,
+                null,
+                {
+                    params: {
+                        grant_type: 'client_credentials',
+                        scope: `manage_project:${projectKey}`,
+                    },
+                    auth: {
+                        username: username as string,
+                        password: password as string,
+                    },
+                    httpsAgent: new https.Agent({
+                        rejectUnauthorized: false,
+                    }),
+                }
+            )
+
+            return response.data.access_token
+        } catch (error) {
+            console.error('Error obtaining commerceTools token:', error);
+            throw new Error('Unable to obtain commerceTools token');
+        }
+    }
+
+    private async getCategoriesURL() {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/categories`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/V1/categories`,
+            adminToken,
         }
     }
 
@@ -84,27 +138,23 @@ export class CategoriesService {
     }
 
     async getCategories(): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
-        console.log(adminToken);
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, adminToken } = await this.getCategoriesURL();
 
         try {
-            const response = await axios.get(`${magentoUrl}/rest/V1/categories`, {
-            // const response = await axios.get(`https://api.us-east-2.aws.commercetools.com/camp-training/categories`, {
+            const response = await axios.get(`${url}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
-                    // Authorization: `Bearer LFyqpa4AXAa-eKfOSC0mXJrV-AmjT3os`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            // return response.data?.results;
-            return this.formatCategories(response.data);
+            return isCommerceTools ? response.data?.results : this.formatCategories(response.data);
         }
         catch (error) {
-            console.error('Error fetching categories from Magento:', error);
-            throw new Error('Unable to fetch categories from Magento');
+            console.error('Error fetching categories:', error);
+            throw new Error('Unable to fetch categories');
         }
     }
 }
