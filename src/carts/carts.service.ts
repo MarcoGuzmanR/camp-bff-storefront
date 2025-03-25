@@ -155,6 +155,33 @@ export class CartsService {
         }
     }
 
+    private async getRemoveLineItemCartURL(cartId, cartItem) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts/${cartId}`,
+                method: 'post',
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        const cartItemId = cartItem.RemoveLineItem.lineItemId;
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItemId}`,
+            method: 'delete',
+            adminToken,
+        }
+    }
+
     private formatVariant(product) {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
 
@@ -452,19 +479,29 @@ export class CartsService {
     }
 
     async removeLineItem(cartId, cartItem): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getMagentoAdminToken();
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, method, adminToken } = await this.getRemoveLineItemCartURL(cartId, cartItem);
 
-        const cartItemId = cartItem.RemoveLineItem.lineItemId;
+        const removeLineItemPayload = {
+            version: cartItem.version,
+            actions: [{
+                action: 'removeLineItem',
+                lineItemId: cartItem.RemoveLineItem.lineItemId,
+            }],
+        }
 
         try {
-            const response = await axios.delete(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItemId}`, {
+            const response = await axios[method](`${url}`, removeLineItemPayload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             const formattedResponse = {
                 version: cartItem.version + 1,
