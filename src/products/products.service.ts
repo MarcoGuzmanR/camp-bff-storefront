@@ -284,8 +284,16 @@ export class ProductsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
+            const formatCommercetoolsProductBySku = (product) => {
+                return {
+                    ...product,
+                    description: product.description['en-US'],
+                    name: product.name['en-US'],
+                }
+            }
+
             if (isCommerceTools) {
-                return productResponse.data.results[0];
+                return formatCommercetoolsProductBySku(productResponse.data.results[0]);
             }
 
             const item = productResponse?.data;
