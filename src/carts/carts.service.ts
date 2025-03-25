@@ -7,7 +7,7 @@ import * as https from 'https';
 export class CartsService {
     constructor(private configService: ConfigService) {}
 
-    private async getAdminToken(): Promise<string> {
+    private async getMagentoAdminToken(): Promise<string> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const username = this.configService.get<string>('ADMIN');
         const password = this.configService.get<string>('PASS');
@@ -25,6 +25,106 @@ export class CartsService {
         } catch (error) {
             console.error('Error obtaining admin token:', error);
             throw new Error('Unable to obtain admin token');
+        }
+    }
+
+    private async getCommerceToolsAdminToken(): Promise<string> {
+        const commerceToolsAuthUrl = this.configService.get<string>('COMMERCETOOLS_AUTH_URL');
+        const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+        const username = this.configService.get<string>('COMMERCETOOLS_CLIENT_ID');
+        const password = this.configService.get<string>('COMMERCETOOLS_CLIENT_SECRET');
+
+        try {
+            const response = await axios.post(`${commerceToolsAuthUrl}/oauth/token`,
+                null,
+                {
+                    params: {
+                        grant_type: 'client_credentials',
+                        scope: `manage_project:${projectKey}`,
+                    },
+                    auth: {
+                        username: username as string,
+                        password: password as string,
+                    },
+                    httpsAgent: new https.Agent({
+                        rejectUnauthorized: false,
+                    }),
+                }
+            )
+
+            return response.data.access_token
+        } catch (error) {
+            console.error('Error obtaining commerceTools token:', error);
+            throw new Error('Unable to obtain commerceTools token');
+        }
+    }
+
+    private async getCreateNewCartURL() {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts`,
+            adminToken,
+        }
+    }
+
+    private async getCartIdURL(cartId) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts/${cartId}`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}`,
+            adminToken,
+        }
+    }
+
+    private async getAddLineItemCartURL(cartId) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts/${cartId}`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items`,
+            adminToken,
         }
     }
 
@@ -64,17 +164,22 @@ export class CartsService {
     }
 
     async createNewCart(): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, adminToken } = await this.getCreateNewCartURL();
+        const payload = isCommerceTools ? { currency: 'USD' } : {};
 
         try {
-            const response = await axios.post(`${magentoUrl}/rest/all/V1/guest-carts`, {}, {
+            const response = await axios.post(`${url}`, payload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             return {
                 id: response.data,
@@ -96,7 +201,7 @@ export class CartsService {
 
     async getFormatItems(items): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const adminToken = await this.getMagentoAdminToken();
 
         return await Promise.all(items.map(async (item) => {
             try {
@@ -127,17 +232,21 @@ export class CartsService {
     }
 
     async getCart(cartId): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, adminToken } = await this.getCartIdURL(cartId);
 
         try {
-            const response = await axios.get(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}`, {
+            const response = await axios.get(`${url}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             const cart = response.data;
 
@@ -188,25 +297,65 @@ export class CartsService {
         }
     }
 
-    async addLineItem(cartId, cartItem): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+    private async getAddLineItemPayload(cartItem) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+        const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+        const adminToken = await this.getCommerceToolsAdminToken();
 
-        const payload = {
-            cartItem: {
-                sku: cartItem.AddLineItem.variantId,
-                qty: cartItem.AddLineItem.quantity,
-            }
-        };
-
+        const sku = cartItem.AddLineItem.variantId;
         try {
-            const response = await axios.post(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items`, payload, {
+            const productResponse = await axios.get(`${commerceToolsApiUrl}/${projectKey}/product-projections/search?filter=variants.key:"${sku}"`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return {
+                    version: cartItem.version,
+                    actions: [{
+                        action: 'addLineItem',
+                        productId: productResponse.data.results[0].id,
+                        variantId: productResponse.data.results[0].masterVariant.id,
+                        quantity: cartItem.AddLineItem.quantity,
+                    }],
+                }
+            }
+
+            return {
+                cartItem: {
+                    sku: cartItem.AddLineItem.variantId,
+                    qty: cartItem.AddLineItem.quantity,
+                }
+            }
+        }
+        catch (error) {
+            console.error('Error fetching a product', error);
+            throw new Error('Unable to fetch a product');
+        }
+    }
+
+    async addLineItem(cartId, cartItem): Promise<any> {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, adminToken } = await this.getAddLineItemCartURL(cartId);
+
+        const addLineItemPayload = await this.getAddLineItemPayload(cartItem);
+
+        try {
+            const response = await axios.post(`${url}`, addLineItemPayload, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            });
+
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             const formattedResponse = {
                 version: cartItem.version + 1,
@@ -223,7 +372,7 @@ export class CartsService {
 
     async changeLineItemQuantity(cartId, cartItem): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const adminToken = await this.getMagentoAdminToken();
 
         const itemId = cartItem.ChangeLineItemQuantity.lineItemId;
 
@@ -258,7 +407,7 @@ export class CartsService {
 
     async removeLineItem(cartId, cartItem): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const adminToken = await this.getMagentoAdminToken();
 
         const cartItemId = cartItem.RemoveLineItem.lineItemId;
 
@@ -286,7 +435,7 @@ export class CartsService {
 
     async setShippingAddress(cartId, cartItem): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const adminToken = await this.getMagentoAdminToken();
 
         const shippingInfo = cartItem.SetShippingAddress;
         const payload = {
@@ -325,7 +474,7 @@ export class CartsService {
 
     async createOrder(cartId): Promise<any> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const adminToken = await this.getMagentoAdminToken();
 
         const payload = {
             method: 'card',

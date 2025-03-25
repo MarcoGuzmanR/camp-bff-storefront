@@ -270,6 +270,14 @@ export class ProductsService {
         }
     }
 
+    private formatCommercetoolsProductBySku = (product) => {
+        return {
+            ...product,
+            description: product.description['en-US'],
+            name: product.name['en-US'],
+        }
+    }
+
     async getProductBySku(sku: string): Promise<any> {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
@@ -284,16 +292,8 @@ export class ProductsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            const formatCommercetoolsProductBySku = (product) => {
-                return {
-                    ...product,
-                    description: product.description['en-US'],
-                    name: product.name['en-US'],
-                }
-            }
-
             if (isCommerceTools) {
-                return formatCommercetoolsProductBySku(productResponse.data.results[0]);
+                return this.formatCommercetoolsProductBySku(productResponse.data.results[0]);
             }
 
             const item = productResponse?.data;
@@ -319,8 +319,8 @@ export class ProductsService {
         }
 
         catch (error) {
-            console.error('Error fetching a product from Magento:', error);
-            throw new Error('Unable to fetch a product from Magento');
+            console.error('Error fetching a product', error);
+            throw new Error('Unable to fetch a product');
         }
     }
 }
