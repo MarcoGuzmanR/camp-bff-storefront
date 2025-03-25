@@ -96,7 +96,7 @@ export class CategoriesService {
         }
     }
 
-    private formatCategories(categories) {
+    private formatMagentoCategories(categories) {
         const formattedCategories: Category = [{
             ancestors: [],
             id: String(categories.id),
@@ -137,6 +137,14 @@ export class CategoriesService {
         return formattedCategories;
     }
 
+    private formatCommercetoolsCategories(categories) {
+        return categories.map((category) => ({
+            ...category,
+            slug: category.slug['en-US'],
+            name: category.name['en-US'],
+        }));
+    }
+
     async getCategories(): Promise<any> {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
         const { url, adminToken } = await this.getCategoriesURL();
@@ -150,7 +158,7 @@ export class CategoriesService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            return isCommerceTools ? response.data?.results : this.formatCategories(response.data);
+            return isCommerceTools ? this.formatCommercetoolsCategories(response.data?.results) : this.formatMagentoCategories(response.data);
         }
         catch (error) {
             console.error('Error fetching categories:', error);

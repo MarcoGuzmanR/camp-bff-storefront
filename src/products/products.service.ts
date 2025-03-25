@@ -224,6 +224,18 @@ export class ProductsService {
         }));
     }
 
+    private formatCommercetoolsProductsByCategory = (data) => {
+        const results = data.results.map((product) => ({
+            ...product,
+            name: product.name['en-US']
+        }));
+
+        return {
+            ...data,
+            results
+        }
+    };
+
     private formatProductVariants = (children) => {
         return children.map((child) => this.formatVariant(child));
     }
@@ -242,7 +254,7 @@ export class ProductsService {
             });
 
             if (isCommerceTools) {
-                return response.data;
+                return this.formatCommercetoolsProductsByCategory(response.data);
             }
 
             return {
