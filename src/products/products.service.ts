@@ -7,7 +7,7 @@ import * as https from 'https';
 export class ProductsService {
     constructor(private configService: ConfigService) {}
 
-    private async getAdminToken(): Promise<string> {
+    private async getMagentoAdminToken(): Promise<string> {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
         const username = this.configService.get<string>('ADMIN');
         const password = this.configService.get<string>('PASS');
@@ -25,6 +25,37 @@ export class ProductsService {
         } catch (error) {
             console.error('Error obtaining admin token:', error);
             throw new Error('Unable to obtain admin token');
+        }
+    }
+
+    private async getCommerceToolsAdminToken(): Promise<string> {
+        const commerceToolsAuthUrl = this.configService.get<string>('COMMERCETOOLS_AUTH_URL');
+        const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+        const username = this.configService.get<string>('COMMERCETOOLS_CLIENT_ID');
+        const password = this.configService.get<string>('COMMERCETOOLS_CLIENT_SECRET');
+
+        try {
+            const response = await axios.post(`${commerceToolsAuthUrl}/oauth/token`,
+                null,
+                {
+                    params: {
+                        grant_type: 'client_credentials',
+                        scope: `manage_project:${projectKey}`,
+                    },
+                    auth: {
+                        username: username as string,
+                        password: password as string,
+                    },
+                    httpsAgent: new https.Agent({
+                        rejectUnauthorized: false,
+                    }),
+                }
+            )
+
+            return response.data.access_token
+        } catch (error) {
+            console.error('Error obtaining commerceTools token:', error);
+            throw new Error('Unable to obtain commerceTools token');
         }
     }
 
@@ -69,6 +100,54 @@ export class ProductsService {
 
         return `products?${queryParams.toString()}`;
     }
+
+    private async getProductsURL(params) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/product-projections/search?filter=categories.id:"${params.categoryId}"`,
+                adminToken,
+            };
+        }
+
+        const productsURLWithParams = this.getProductsURLWithParams(params);
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/V1/${productsURLWithParams}`,
+            adminToken,
+        }
+    }
+
+    private async getProductsBySkuURL(sku) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/product-projections/search?filter=variants.key:"${sku}"`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/V1/products/${sku}`,
+            adminToken,
+        }
+    }
+
 
     private formatVariant = (item) => {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
@@ -150,12 +229,11 @@ export class ProductsService {
     }
 
     async getProducts(params): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
-        const productsURLWithParams = this.getProductsURLWithParams(params);
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, adminToken } = await this.getProductsURL(params);
 
         try {
-            const response = await axios.get(`${magentoUrl}/rest/V1/${productsURLWithParams}`, {
+            const response = await axios.get(`${url}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
@@ -163,6 +241,9 @@ export class ProductsService {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             return {
                 total: response.data?.total_count,
@@ -172,23 +253,28 @@ export class ProductsService {
 
         }
         catch (error) {
-            console.error('Error fetching products from Magento:', error);
-            throw new Error('Unable to fetch products from Magento');
+            console.error('Error fetching products', error);
+            throw new Error('Unable to fetch products');
         }
     }
 
     async getProductBySku(sku: string): Promise<any> {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getAdminToken();
+        const { url, adminToken } = await this.getProductsBySkuURL(sku);
 
         try {
-            const productResponse = await axios.get(`${magentoUrl}/rest/V1/products/${sku}`, {
+            const productResponse = await axios.get(`${url}`, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return productResponse.data.results[0];
+            }
 
             const item = productResponse?.data;
 

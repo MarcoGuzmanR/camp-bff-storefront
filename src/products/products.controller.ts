@@ -11,7 +11,7 @@ export class ProductsController {
         @Query('offset') offset: string,
         @Query('limit') limit: string,
     ) {
-        const categoryIdNumber = categoryId ? parseInt(categoryId) : null;
+        const categoryIdNumber = categoryId ? categoryId : null;
         const offsetNumber = offset ? parseInt(offset) : 0;
         const limitNumber = limit ? parseInt(limit) : 10;
 
