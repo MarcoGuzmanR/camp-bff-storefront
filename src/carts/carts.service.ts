@@ -128,6 +128,33 @@ export class CartsService {
         }
     }
 
+    private async getChangeLineItemQuantityCartURL(cartId, cartItem) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts/${cartId}`,
+                method: 'post',
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        const itemId = cartItem.ChangeLineItemQuantity.lineItemId;
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${itemId}`,
+            method: 'put',
+            adminToken,
+        }
+    }
+
     private formatVariant(product) {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
 
@@ -370,27 +397,46 @@ export class CartsService {
         }
     }
 
-    async changeLineItemQuantity(cartId, cartItem): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getMagentoAdminToken();
+    private getChangeLineItemPayload(cartItem) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
 
-        const itemId = cartItem.ChangeLineItemQuantity.lineItemId;
+        if (isCommerceTools) {
+            return {
+                version: cartItem.version,
+                actions: [{
+                    action: 'changeLineItemQuantity',
+                    lineItemId: cartItem.ChangeLineItemQuantity.lineItemId,
+                    quantity: cartItem.ChangeLineItemQuantity.quantity,
+                }],
+            }
+        }
 
-        const payload = {
+        return {
             cartItem: {
                 item_id: cartItem.ChangeLineItemQuantity.lineItemId,
                 qty: cartItem.ChangeLineItemQuantity.quantity,
             }
-        };
+        }
+    }
+
+    async changeLineItemQuantity(cartId, cartItem): Promise<any> {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+        const { url, method, adminToken } = await this.getChangeLineItemQuantityCartURL(cartId, cartItem);
+
+        const changeLineItemQuantityPayload = this.getChangeLineItemPayload(cartItem);
 
         try {
-            const response = await axios.put(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${itemId}`, payload, {
+            const response = await axios[method](`${url}`, changeLineItemQuantityPayload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
+
+            if (isCommerceTools) {
+                return response.data;
+            }
 
             const formattedResponse = {
                 version: cartItem.version + 1,
