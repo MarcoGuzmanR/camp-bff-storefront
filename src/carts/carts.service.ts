@@ -205,6 +205,31 @@ export class CartsService {
         }
     }
 
+    private async getCreateOrderURL(cartId) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/orders`,
+                method: 'post',
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/order`,
+            method: 'put',
+            adminToken,
+        }
+    }
+
     private formatVariant(product) {
         const magentoUrl = this.configService.get<string>('MAGENTO_URL');
 
@@ -604,16 +629,31 @@ export class CartsService {
         }
     }
 
-    async createOrder(cartId): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getMagentoAdminToken();
+    private getCreateOrderPayload(cartId) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
 
-        const payload = {
-            method: 'card',
-        };
+        if (isCommerceTools) {
+            return {
+                cart: {
+                    id: cartId,
+                    typeId: 'cart',
+                },
+                version: cartId.version,
+            }
+        }
+
+        return {
+            method: 'card'
+        }
+    }
+
+    async createOrder(cartId): Promise<any> {
+        const { url, method, adminToken } = await this.getCreateOrderURL(cartId);
+
+        const createOrderPayload = this.getCreateOrderPayload(cartId);
 
         try {
-            const response = await axios.put(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/order`, payload, {
+            const response = await axios[method](`${url}`, createOrderPayload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
