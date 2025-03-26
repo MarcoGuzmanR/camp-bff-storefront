@@ -105,7 +105,7 @@ export class CartsService {
         }
     }
 
-    private async getAddLineItemCartURL(cartId) {
+    private async getAddLineItemURL(cartId) {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
 
         if (isCommerceTools) {
@@ -128,7 +128,7 @@ export class CartsService {
         }
     }
 
-    private async getChangeLineItemQuantityCartURL(cartId, cartItem) {
+    private async getChangeLineItemQuantityURL(cartId, cartItem) {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
 
         if (isCommerceTools) {
@@ -155,7 +155,7 @@ export class CartsService {
         }
     }
 
-    private async getRemoveLineItemCartURL(cartId, cartItem) {
+    private async getRemoveLineItemURL(cartId, cartItem) {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
 
         if (isCommerceTools) {
@@ -178,6 +178,29 @@ export class CartsService {
         return {
             url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/items/${cartItemId}`,
             method: 'delete',
+            adminToken,
+        }
+    }
+
+    private async getSetShippingAddressURL(cartId) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            const commerceToolsApiUrl = this.configService.get<string>('COMMERCETOOLS_API_URL');
+            const projectKey = this.configService.get<string>('COMMERCETOOLS_PROJECT_KEY');
+            const adminToken = await this.getCommerceToolsAdminToken();
+
+            return {
+                url: `${commerceToolsApiUrl}/${projectKey}/carts/${cartId}`,
+                adminToken,
+            };
+        }
+
+        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
+        const adminToken = await this.getMagentoAdminToken();
+
+        return {
+            url: `${magentoUrl}/rest/all/V1/guest-carts/${cartId}/shipping-information`,
             adminToken,
         }
     }
@@ -299,7 +322,15 @@ export class CartsService {
             });
 
             if (isCommerceTools) {
-                return response.data;
+                const lineItems = response.data.lineItems.map((item) => ({
+                    ...item,
+                    totalPrice: item.totalPrice.centAmount,
+                }));
+
+                return {
+                    ...response.data,
+                    lineItems,
+                };
             }
 
             const cart = response.data;
@@ -394,7 +425,7 @@ export class CartsService {
 
     async addLineItem(cartId, cartItem): Promise<any> {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
-        const { url, adminToken } = await this.getAddLineItemCartURL(cartId);
+        const { url, adminToken } = await this.getAddLineItemURL(cartId);
 
         const addLineItemPayload = await this.getAddLineItemPayload(cartItem);
 
@@ -448,7 +479,7 @@ export class CartsService {
 
     async changeLineItemQuantity(cartId, cartItem): Promise<any> {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
-        const { url, method, adminToken } = await this.getChangeLineItemQuantityCartURL(cartId, cartItem);
+        const { url, method, adminToken } = await this.getChangeLineItemQuantityURL(cartId, cartItem);
 
         const changeLineItemQuantityPayload = this.getChangeLineItemPayload(cartItem);
 
@@ -480,7 +511,7 @@ export class CartsService {
 
     async removeLineItem(cartId, cartItem): Promise<any> {
         const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
-        const { url, method, adminToken } = await this.getRemoveLineItemCartURL(cartId, cartItem);
+        const { url, method, adminToken } = await this.getRemoveLineItemURL(cartId, cartItem);
 
         const removeLineItemPayload = {
             version: cartItem.version,
@@ -516,12 +547,24 @@ export class CartsService {
         }
     }
 
-    async setShippingAddress(cartId, cartItem): Promise<any> {
-        const magentoUrl = this.configService.get<string>('MAGENTO_URL');
-        const adminToken = await this.getMagentoAdminToken();
+    private getSetShippingAddressPayload(cartItem) {
+        const isCommerceTools = this.configService.get<string>('SET_ECOMMERCE') === 'COMMERCETOOLS';
+
+        if (isCommerceTools) {
+            return {
+                version: cartItem.version,
+                actions: [{
+                    action: 'setShippingAddress',
+                    address: {
+                        ...cartItem.SetShippingAddress
+                    },
+                }],
+            }
+        }
 
         const shippingInfo = cartItem.SetShippingAddress;
-        const payload = {
+
+        return {
             addressInformation: {
                 shipping_address: {
                     firstname: shippingInfo.firstName,
@@ -537,9 +580,15 @@ export class CartsService {
                 shipping_carrier_code: 'flatrate',
             }
         };
+    }
+
+    async setShippingAddress(cartId, cartItem): Promise<any> {
+        const { url, adminToken } = await this.getSetShippingAddressURL(cartId);
+
+        const setShippingAddressPayload = this.getSetShippingAddressPayload(cartItem);
 
         try {
-            const response = await axios.post(`${magentoUrl}/rest/all/V1/guest-carts/${cartId}/shipping-information`, payload, {
+            const response = await axios.post(`${url}`, setShippingAddressPayload, {
                 headers: {
                     Authorization: `Bearer ${adminToken}`,
                     'Content-Type': 'application/json',
@@ -550,8 +599,8 @@ export class CartsService {
             return response?.data;
         }
         catch (error) {
-            console.error('Error on adding a new item to the cart:', error);
-            throw new Error('Unable to add a new item to the cart');
+            console.error('Error on adding a shipping address to the cart:', error);
+            throw new Error('Unable to add a shipping address to the cart');
         }
     }
 
