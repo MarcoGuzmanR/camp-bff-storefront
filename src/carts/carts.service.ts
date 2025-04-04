@@ -349,6 +349,10 @@ export class CartsService {
             if (isCommerceTools) {
                 const lineItems = response.data.lineItems.map((item) => ({
                     ...item,
+                    variant: {
+                        ...item.variant,
+                        name: item.name['en-US'],
+                    },
                     totalPrice: item.totalPrice.centAmount,
                 }));
 
